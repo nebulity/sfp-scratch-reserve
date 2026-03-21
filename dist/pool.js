@@ -190,10 +190,9 @@ function authenticateDevHubIfNeeded(options) {
 function escapeSingleQuotes(raw) {
     return raw.replace(/'/g, "\\'");
 }
-function updateAllocationStatus(devhubAlias, username, action) {
-    const statusValue = action === "reserve" ? "Reserve" : "Return";
+function releaseAllocationStatus(devhubAlias, username) {
     const escapedUsername = escapeSingleQuotes(username);
-    runCommand("sf", buildScratchOrgUpdateArgs(devhubAlias, escapedUsername, statusValue));
+    runCommand("sf", buildScratchOrgUpdateArgs(devhubAlias, escapedUsername, "Return"));
 }
 async function reservePooledScratchOrg(options) {
     const sfpCommand = resolveSfpCommand();
@@ -207,7 +206,6 @@ async function reservePooledScratchOrg(options) {
             const scratchUsername = extractScratchUsername(result.output);
             if (scratchUsername) {
                 console.log(`Fetched pooled scratch org: ${scratchUsername}`);
-                updateAllocationStatus(options.devhubAlias, scratchUsername, "reserve");
                 return scratchUsername;
             }
         }
@@ -276,10 +274,10 @@ function runPost() {
     }
     const devhubAlias = getState("devhub-alias") || getInput("devhub-alias", "");
     console.log(`Returning scratch org to pool: ${scratchUsername}`);
-    updateAllocationStatus(devhubAlias, scratchUsername, "release");
+    releaseAllocationStatus(devhubAlias, scratchUsername);
 }
 function buildPoolFetchArgs(poolTag, devhubAlias) {
-    const args = ["pool:fetch", "-t", poolTag];
+    const args = ["pool fetch", "-t", poolTag];
     if (devhubAlias) {
         args.push("-v", devhubAlias);
     }
@@ -309,7 +307,7 @@ function buildDevHubLoginArgs(devhubAlias, setDefaultDevHub) {
     if (setDefaultDevHub) {
         args.push("--set-default-dev-hub");
     }
-    args.push("--sfdx-url-stdin", "-");
+    args.push("--sfdx-url-stdin");
     return args;
 }
 function resolveSfpCommand() {

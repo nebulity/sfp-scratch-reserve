@@ -72,7 +72,7 @@ describe("output parsing", () => {
 describe("argument builders", () => {
   it("builds pool fetch args with devhub", () => {
     expect(buildPoolFetchArgs("ci-pool", "devhub")).toEqual([
-      "pool:fetch",
+      "pool fetch",
       "-t",
       "ci-pool",
       "-v",
@@ -82,7 +82,7 @@ describe("argument builders", () => {
   });
 
   it("builds scratch update args without devhub", () => {
-    expect(buildScratchOrgUpdateArgs("", "user@example.com", "Reserve")).toEqual([
+    expect(buildScratchOrgUpdateArgs("", "user@example.com", "Return")).toEqual([
       "data",
       "update",
       "record",
@@ -91,7 +91,7 @@ describe("argument builders", () => {
       "--where",
       "SignupUsername='user@example.com'",
       "--values",
-      "Allocation_status__c='Reserve'",
+      "Allocation_status__c='Return'",
     ]);
   });
 
@@ -115,7 +115,6 @@ describe("argument builders", () => {
       "devhub",
       "--set-default-dev-hub",
       "--sfdx-url-stdin",
-      "-",
     ]);
   });
 

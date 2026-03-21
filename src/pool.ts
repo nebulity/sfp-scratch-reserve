@@ -13,8 +13,6 @@ interface ActionOptions {
   setDefaultDevHub: boolean;
 }
 
-type AllocationAction = "reserve" | "release";
-
 interface CommandResult {
   status: number;
   output: string;
@@ -245,15 +243,9 @@ function escapeSingleQuotes(raw: string): string {
   return raw.replace(/'/g, "\\'");
 }
 
-function updateAllocationStatus(
-  devhubAlias: string,
-  username: string,
-  action: AllocationAction,
-): void {
-  const statusValue = action === "reserve" ? "Reserve" : "Return";
+function releaseAllocationStatus(devhubAlias: string, username: string): void {
   const escapedUsername = escapeSingleQuotes(username);
-
-  runCommand("sf", buildScratchOrgUpdateArgs(devhubAlias, escapedUsername, statusValue));
+  runCommand("sf", buildScratchOrgUpdateArgs(devhubAlias, escapedUsername, "Return"));
 }
 
 async function reservePooledScratchOrg(options: ActionOptions): Promise<string> {
@@ -276,7 +268,6 @@ async function reservePooledScratchOrg(options: ActionOptions): Promise<string> 
       const scratchUsername = extractScratchUsername(result.output);
       if (scratchUsername) {
         console.log(`Fetched pooled scratch org: ${scratchUsername}`);
-        updateAllocationStatus(options.devhubAlias, scratchUsername, "reserve");
         return scratchUsername;
       }
     } else {
@@ -373,11 +364,11 @@ export function runPost(): void {
 
   const devhubAlias = getState("devhub-alias") || getInput("devhub-alias", "");
   console.log(`Returning scratch org to pool: ${scratchUsername}`);
-  updateAllocationStatus(devhubAlias, scratchUsername, "release");
+  releaseAllocationStatus(devhubAlias, scratchUsername);
 }
 
 export function buildPoolFetchArgs(poolTag: string, devhubAlias: string): string[] {
-  const args = ["pool:fetch", "-t", poolTag];
+  const args = ["pool fetch", "-t", poolTag];
   if (devhubAlias) {
     args.push("-v", devhubAlias);
   }
@@ -415,7 +406,7 @@ export function buildDevHubLoginArgs(devhubAlias: string, setDefaultDevHub: bool
   if (setDefaultDevHub) {
     args.push("--set-default-dev-hub");
   }
-  args.push("--sfdx-url-stdin", "-");
+  args.push("--sfdx-url-stdin");
   return args;
 }
 
