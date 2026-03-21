@@ -1,0 +1,46 @@
+name: Reserve Scratch
+description: Fetches and reserves a pooled scratch org via sfp, then releases it in the post step.
+
+inputs:
+  pool-tag:
+    description: Scratch org pool tag.
+    required: true
+  devhub-alias:
+    description: Optional Dev Hub alias used by sf/sfp commands. Leave empty to use the current default Dev Hub context.
+    required: false
+    default: "devhub"
+  devhub-sfdx-auth-url:
+    description: Optional SFDX auth URL for Dev Hub login; used only when devhub alias is not already authenticated.
+    required: false
+    default: ""
+  set-default-devhub:
+    description: Set logged-in Dev Hub as default when authenticating with devhub-sfdx-auth-url.
+    required: false
+    default: "false"
+  scratch-alias:
+    description: Alias assigned to the reserved scratch org.
+    required: false
+    default: "scratch"
+  set-default-target-org:
+    description: Set reserved scratch org (or alias) as default target org in this job.
+    required: false
+    default: "true"
+  fetch-attempts:
+    description: Number of fetch attempts before failing.
+    required: false
+    default: "30"
+  fetch-retry-seconds:
+    description: Delay between fetch attempts in seconds.
+    required: false
+    default: "60"
+
+outputs:
+  scratch-username:
+    description: Reserved scratch org username.
+  scratch-alias:
+    description: Alias assigned to the reserved scratch org.
+
+runs:
+  using: node20
+  main: main.cjs
+  post: post.cjs
