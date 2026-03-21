@@ -42,5 +42,5 @@ outputs:
 
 runs:
   using: node20
-  main: main.cjs
-  post: post.cjs
+  main: dist/main.js
+  post: dist/post.js

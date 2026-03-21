@@ -2,6 +2,20 @@
 
 GitHub Action that reserves a pooled Salesforce scratch org via `sfp`, exposes it as outputs, and automatically returns it to the pool in a post step.
 
+## Motivation
+
+- Auto adds release step on operation end (`post`).
+
+## Development
+
+- Install dependencies: `npm install`
+- Format: `npm run format`
+- Lint: `npm run lint`
+- Test: `npm run test`
+- Type-check only: `npm run typecheck`
+- Build TypeScript: `npm run build`
+- Run all CI checks locally: `npm run ci`
+
 ## Prerequisites
 
 - `sf` CLI available in `PATH`
@@ -43,3 +57,8 @@ GitHub Action that reserves a pooled Salesforce scratch org via `sfp`, exposes i
 - Reserves by fetching from `sfp pool:fetch`.
 - Marks allocation status to `Reserve`.
 - In post step, marks allocation status to `Return`.
+
+## Release Flow
+
+- Pull requests and pushes to `main` run `.github/workflows/pr.yml`.
+- Pushes to `main` trigger `.github/workflows/release-please.yml` to maintain release PRs and changelog updates.
