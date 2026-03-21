@@ -20,3 +20,15 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Checkout
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v4
+
+      - name: Move major action tag
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa "v${{ steps.release.outputs.major }}" "${{ steps.release.outputs.sha }}" -m "Release v${{ steps.release.outputs.major }}"
+          git push origin "v${{ steps.release.outputs.major }}" --force
