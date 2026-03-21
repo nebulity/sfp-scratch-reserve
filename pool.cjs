@@ -140,10 +140,12 @@ function setState(name, value) {
 }
 
 function runCommandAllowFailure(command, args, captureOutput = false, stdin = '') {
+    const hasStdinInput = stdin.length > 0
+    const stdio = captureOutput ? 'pipe' : hasStdinInput ? ['pipe', 'inherit', 'inherit'] : 'inherit'
     const result = spawnSync(command, args, {
         encoding: 'utf8',
-        stdio: captureOutput ? 'pipe' : 'inherit',
-        input: stdin.length > 0 ? stdin : undefined
+        stdio,
+        input: hasStdinInput ? stdin : undefined
     })
 
     if (result.error) {
