@@ -12,7 +12,7 @@ GitHub Action that reserves a pooled Salesforce scratch org via `sfp`, exposes i
 
 ```yaml
 - name: Reserve Scratch Org
-  uses: andrii-solokh/reserve-scratch@v1
+  uses: andrii-solokh/sfp-scratch-reserve@v1
   with:
     pool-tag: latdx-ci
     devhub-sfdx-auth-url: ${{ secrets.SFDX_AUTH_URL_LATDX_DH }}
