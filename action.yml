@@ -6,9 +6,9 @@ inputs:
     description: Scratch org pool tag.
     required: true
   devhub-alias:
-    description: Optional Dev Hub alias used by sf/sfp commands. Leave empty to use the current default Dev Hub context.
+    description: Optional Dev Hub alias or username used by sf/sfp commands. Leave empty to use the current default Dev Hub context.
     required: false
-    default: "devhub"
+    default: ""
   devhub-sfdx-auth-url:
     description: Optional SFDX auth URL for Dev Hub login; used only when devhub alias is not already authenticated.
     required: false

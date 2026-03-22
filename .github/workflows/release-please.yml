@@ -20,3 +20,15 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Move v0 major tag
+        if: steps.release.outputs.release_created == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update v0 tag
+        if: steps.release.outputs.release_created == 'true'
+        run: |
+          git tag -f v0 ${{ steps.release.outputs.tag_name }}
+          git push origin v0 --force

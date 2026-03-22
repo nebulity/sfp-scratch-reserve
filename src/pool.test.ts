@@ -82,6 +82,10 @@ describe("argument builders", () => {
     ]);
   });
 
+  it("builds pool fetch args without devhub", () => {
+    expect(buildPoolFetchArgs("ci-pool", "")).toEqual(["pool", "fetch", "-t", "ci-pool", "--json"]);
+  });
+
   it("builds scratch update args without devhub", () => {
     expect(buildScratchOrgUpdateArgs("", "user@example.com", "Return")).toEqual([
       "data",
