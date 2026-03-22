@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.7](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.6...v0.1.7) (2026-03-22)
+
+
+### Bug Fixes
+
+* remove unnecessary devhub alias resolution step ([8064ea3](https://github.com/andrii-solokh/sfp-scratch-reserve/commit/8064ea3408d2ba73f9a31f1b1e264d5c9325005e))
+* use sfp pool fetch -a and -d flags instead of separate sf alias/config calls ([85e2051](https://github.com/andrii-solokh/sfp-scratch-reserve/commit/85e2051307d2fcf11e5444888fae0f447a1de4df))
+
 ## [0.1.6](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.5...v0.1.6) (2026-03-22)
 
 
