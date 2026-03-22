@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.5...v0.1.6) (2026-03-22)
+
+
+### Bug Fixes
+
+* default devhub-alias to empty and automate v0 tag on release ([07139e0](https://github.com/andrii-solokh/sfp-scratch-reserve/commit/07139e087fe33dde0c808b121ee8641904ad56da))
+
 ## [0.1.5](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.4...v0.1.5) (2026-03-22)
 
 
