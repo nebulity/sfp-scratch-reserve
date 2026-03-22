@@ -13,7 +13,8 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^9.23.0",
@@ -21,6 +22,7 @@
     "eslint": "^9.23.0",
     "eslint-config-prettier": "^10.1.1",
     "globals": "^16.0.0",
+    "husky": "^9.1.7",
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.28.0",
