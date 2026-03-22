@@ -277,7 +277,7 @@ function runPost() {
     releaseAllocationStatus(devhubAlias, scratchUsername);
 }
 function buildPoolFetchArgs(poolTag, devhubAlias) {
-    const args = ["pool fetch", "-t", poolTag];
+    const args = ["pool", "fetch", "-t", poolTag];
     if (devhubAlias) {
         args.push("-v", devhubAlias);
     }

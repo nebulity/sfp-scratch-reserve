@@ -72,7 +72,8 @@ describe("output parsing", () => {
 describe("argument builders", () => {
   it("builds pool fetch args with devhub", () => {
     expect(buildPoolFetchArgs("ci-pool", "devhub")).toEqual([
-      "pool fetch",
+      "pool",
+      "fetch",
       "-t",
       "ci-pool",
       "-v",

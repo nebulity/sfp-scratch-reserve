@@ -368,7 +368,7 @@ export function runPost(): void {
 }
 
 export function buildPoolFetchArgs(poolTag: string, devhubAlias: string): string[] {
-  const args = ["pool fetch", "-t", poolTag];
+  const args = ["pool", "fetch", "-t", poolTag];
   if (devhubAlias) {
     args.push("-v", devhubAlias);
   }
