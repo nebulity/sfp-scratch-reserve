@@ -27,8 +27,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Update v0 tag
+      - name: Update major version tags
         if: steps.release.outputs.release_created == 'true'
         run: |
-          git tag -f v0 ${{ steps.release.outputs.tag_name }}
-          git push origin v0 --force
+          major=$(echo "${{ steps.release.outputs.major }}" | head -1)
+          git tag -f "v${major}" "${{ steps.release.outputs.tag_name }}"
+          git push origin "v${major}" --force
+          # Keep v0 pointing to latest for backwards compatibility
+          if [ "$major" != "0" ]; then
+            git tag -f v0 "${{ steps.release.outputs.tag_name }}"
+            git push origin v0 --force
+          fi
