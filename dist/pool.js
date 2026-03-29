@@ -221,8 +221,7 @@ async function reservePooledScratchOrg(options) {
     fail(`Timed out after ${options.fetchAttempts * options.fetchRetrySeconds} seconds waiting for an available scratch org in pool "${options.poolTag}".`);
 }
 function getState(name) {
-    const key = `STATE_${name.replace(/-/g, "_").toUpperCase()}`;
-    const value = process.env[key];
+    const value = process.env[`STATE_${name}`];
     if (typeof value !== "string") {
         return "";
     }

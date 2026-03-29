@@ -294,8 +294,7 @@ async function reservePooledScratchOrg(options: ActionOptions): Promise<string> 
 }
 
 function getState(name: string): string {
-  const key = `STATE_${name.replace(/-/g, "_").toUpperCase()}`;
-  const value = process.env[key];
+  const value = process.env[`STATE_${name}`];
   if (typeof value !== "string") {
     return "";
   }
