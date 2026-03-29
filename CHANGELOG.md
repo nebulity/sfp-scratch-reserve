@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.8...v1.0.0) (2026-03-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* removed inputs devhub-sfdx-auth-url, set-default-devhub, and fetch-retry-seconds. DevHub must be authenticated before using this action.
+
+### Features
+
+* simplify action by removing unused features ([5b01d7d](https://github.com/andrii-solokh/sfp-scratch-reserve/commit/5b01d7dba96e20c322303c94a0b518161a4a53ae))
+
 ## [0.1.8](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.7...v0.1.8) (2026-03-29)
 
 ### Bug Fixes
