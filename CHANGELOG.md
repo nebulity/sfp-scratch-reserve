@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.7...v0.1.8) (2026-03-29)
+
+
+### Bug Fixes
+
+* use raw state key name to match GitHub Actions env var format ([60b0828](https://github.com/andrii-solokh/sfp-scratch-reserve/commit/60b08284df6e318c4888986de3900af789f1de61))
+
 ## [0.1.7](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.6...v0.1.7) (2026-03-22)
 
 
