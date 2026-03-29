@@ -1,76 +1,41 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import {
-  buildDevHubLoginArgs,
-  buildDevHubProbeArgs,
-  buildPoolFetchArgs,
-  buildScratchOrgUpdateArgs,
-  extractScratchUsername,
-  parseBooleanInput,
-  parsePositiveInteger,
-  parseRequiredString,
-  resolveInputEnvKeys,
-  resolveSfpCommand,
-} from "./pool";
+import { buildPoolFetchArgs, buildReleaseArgs, extractScratchUsername } from "./pool";
 
-beforeEach(() => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe("input parsing", () => {
-  it("parses required strings", () => {
-    expect(parseRequiredString(" value ", "pool-tag")).toBe("value");
+describe("extractScratchUsername", () => {
+  it("extracts top-level username", () => {
+    expect(extractScratchUsername('{"username":"user@example.com"}')).toBe("user@example.com");
   });
 
-  it("throws for empty required strings", () => {
-    expect(() => parseRequiredString("   ", "pool-tag")).toThrow('Input "pool-tag" is required.');
-  });
-
-  it("parses positive integers", () => {
-    expect(parsePositiveInteger("30", "fetch-attempts")).toBe(30);
-  });
-
-  it("throws for non-positive integers", () => {
-    expect(() => parsePositiveInteger("0", "fetch-attempts")).toThrow(
-      'Input "fetch-attempts" must be a positive integer. Received "0".',
+  it("extracts nested username under result", () => {
+    expect(extractScratchUsername('{"result":{"username":"nested@example.com"}}')).toBe(
+      "nested@example.com",
     );
   });
 
-  it("parses booleans", () => {
-    expect(parseBooleanInput("true", "set-default-target-org")).toBe(true);
-    expect(parseBooleanInput("false", "set-default-target-org")).toBe(false);
+  it("prefers top-level username over nested", () => {
+    expect(
+      extractScratchUsername(
+        '{"username":"top@example.com","result":{"username":"nested@example.com"}}',
+      ),
+    ).toBe("top@example.com");
   });
 
-  it("throws for invalid booleans", () => {
-    expect(() => parseBooleanInput("maybe", "set-default-target-org")).toThrow(
-      'Input "set-default-target-org" must be either "true" or "false". Received "maybe".',
-    );
-  });
-});
-
-describe("output parsing", () => {
-  it("extracts top-level username from JSON output", () => {
-    const output = '{"status":0,"username":"user@example.com"}';
-    expect(extractScratchUsername(output)).toBe("user@example.com");
+  it("returns null for missing username", () => {
+    expect(extractScratchUsername('{"status":0}')).toBeNull();
   });
 
-  it("extracts nested username from JSON output", () => {
-    const output = '{"status":0,"result":{"username":"nested@example.com"}}';
-    expect(extractScratchUsername(output)).toBe("nested@example.com");
+  it("returns null for invalid JSON", () => {
+    expect(extractScratchUsername("not json")).toBeNull();
   });
 
-  it("returns null when username is missing", () => {
-    const output = '{"status":0,"result":{}}';
-    expect(extractScratchUsername(output)).toBeNull();
+  it("returns null for empty username", () => {
+    expect(extractScratchUsername('{"username":"  "}')).toBeNull();
   });
 });
 
-describe("argument builders", () => {
-  it("builds pool fetch args with all options", () => {
+describe("buildPoolFetchArgs", () => {
+  it("builds args with all options", () => {
     expect(buildPoolFetchArgs("ci-pool", "devhub", "scratch", true)).toEqual([
       "pool",
       "fetch",
@@ -85,7 +50,7 @@ describe("argument builders", () => {
     ]);
   });
 
-  it("builds pool fetch args without optional flags", () => {
+  it("builds args without optional flags", () => {
     expect(buildPoolFetchArgs("ci-pool", "", "", false)).toEqual([
       "pool",
       "fetch",
@@ -94,9 +59,27 @@ describe("argument builders", () => {
       "--json",
     ]);
   });
+});
 
-  it("builds scratch update args without devhub", () => {
-    expect(buildScratchOrgUpdateArgs("", "user@example.com", "Return")).toEqual([
+describe("buildReleaseArgs", () => {
+  it("builds release args with devhub alias", () => {
+    expect(buildReleaseArgs("devhub", "user@example.com")).toEqual([
+      "data",
+      "update",
+      "record",
+      "--target-org",
+      "devhub",
+      "--sobject",
+      "ScratchOrgInfo",
+      "--where",
+      "SignupUsername='user@example.com'",
+      "--values",
+      "Allocation_status__c='Available'",
+    ]);
+  });
+
+  it("builds release args without devhub alias", () => {
+    expect(buildReleaseArgs("", "user@example.com")).toEqual([
       "data",
       "update",
       "record",
@@ -105,40 +88,12 @@ describe("argument builders", () => {
       "--where",
       "SignupUsername='user@example.com'",
       "--values",
-      "Allocation_status__c='Return'",
+      "Allocation_status__c='Available'",
     ]);
   });
 
-  it("builds devhub probe args with and without alias", () => {
-    expect(buildDevHubProbeArgs("devhub")).toEqual([
-      "org",
-      "display",
-      "--target-org",
-      "devhub",
-      "--json",
-    ]);
-    expect(buildDevHubProbeArgs("")).toEqual(["org", "display", "--target-dev-hub", "--json"]);
-  });
-
-  it("builds devhub login args", () => {
-    expect(buildDevHubLoginArgs("devhub", true)).toEqual([
-      "org",
-      "login",
-      "sfdx-url",
-      "--alias",
-      "devhub",
-      "--set-default-dev-hub",
-      "--sfdx-url-stdin",
-    ]);
-  });
-
-  it("resolves input env keys including underscore variant", () => {
-    expect(resolveInputEnvKeys("pool-tag")).toEqual(["INPUT_POOL-TAG", "INPUT_POOL_TAG"]);
-  });
-});
-
-describe("sfp command resolution", () => {
-  it("falls back to global sfp binary", () => {
-    expect(resolveSfpCommand()).toBe("sfp");
+  it("escapes single quotes in username", () => {
+    const args = buildReleaseArgs("", "user'name@example.com");
+    expect(args).toContain("SignupUsername='user\\'name@example.com'");
   });
 });
