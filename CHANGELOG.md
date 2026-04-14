@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/nebulity/sfp-scratch-reserve/compare/v1.0.0...v1.1.0) (2026-04-14)
+
+
+### Features
+
+* atomic REST claim via If-Unmodified-Since ([#11](https://github.com/nebulity/sfp-scratch-reserve/issues/11)) ([cc4561b](https://github.com/nebulity/sfp-scratch-reserve/commit/cc4561bd6732e8f9ae915bc44491f12bc461dc2d))
+
 ## [1.0.0](https://github.com/andrii-solokh/sfp-scratch-reserve/compare/v0.1.8...v1.0.0) (2026-03-29)
 
 ### ⚠ BREAKING CHANGES
