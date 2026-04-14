@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.extractJsonObject = extractJsonObject;
 exports.parseDevHubAuth = parseDevHubAuth;
 exports.buildAvailableOrgsSoql = buildAvailableOrgsSoql;
 exports.buildQueryUrl = buildQueryUrl;
@@ -11,6 +12,8 @@ exports.runMain = runMain;
 exports.runPost = runPost;
 const node_child_process_1 = require("node:child_process");
 const node_fs_1 = require("node:fs");
+const node_os_1 = require("node:os");
+const node_path_1 = require("node:path");
 // Salesforce REST API version used for query + atomic claim.
 const API_VERSION = "v59.0";
 // --- GitHub Actions helpers ---
@@ -49,8 +52,41 @@ function exec(command, args, input) {
 function sleep(seconds) {
     return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 }
+function extractJsonObject(output) {
+    // sf CLI often emits warning banners (e.g. "Warning: @salesforce/cli update available...")
+    // before the JSON payload on stdout. Skip to the first '{' and match the balancing '}'.
+    const start = output.indexOf("{");
+    if (start === -1)
+        throw new Error(`No JSON object found in output: ${output.slice(0, 200)}`);
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < output.length; i++) {
+        const ch = output[i];
+        if (inString) {
+            if (escaped)
+                escaped = false;
+            else if (ch === "\\")
+                escaped = true;
+            else if (ch === '"')
+                inString = false;
+            continue;
+        }
+        if (ch === '"')
+            inString = true;
+        else if (ch === "{")
+            depth++;
+        else if (ch === "}") {
+            depth--;
+            if (depth === 0)
+                return output.slice(start, i + 1);
+        }
+    }
+    throw new Error(`Unbalanced JSON in output: ${output.slice(start, start + 200)}`);
+}
 function parseDevHubAuth(output) {
-    const parsed = JSON.parse(output);
+    const json = extractJsonObject(output);
+    const parsed = JSON.parse(json);
     const result = parsed?.result ?? {};
     const { accessToken, instanceUrl, username } = result;
     if (!accessToken || !instanceUrl || !username) {
@@ -141,14 +177,25 @@ async function attemptClaim(auth, candidate) {
 function loginToScratch(authUrl, alias, setDefault) {
     if (!authUrl)
         fail("Won scratch org has no SfdxAuthUrl__c; cannot authenticate.");
-    const args = ["org", "login", "sfdx-url", "--sfdx-url-stdin"];
-    if (alias)
-        args.push("--alias", alias);
-    if (setDefault)
-        args.push("--set-default");
-    const result = exec("sf", args, `${authUrl}\n`);
-    if (result.status !== 0) {
-        fail(`sf org login sfdx-url failed (exit ${result.status}): ${result.output.trim()}`);
+    // `--sfdx-url-stdin` requires an inline <value> in recent sf CLI versions,
+    // which would leak the auth URL into argv. Use `--sfdx-url-file` with a
+    // restricted temp file and remove it afterwards.
+    const dir = (0, node_fs_1.mkdtempSync)((0, node_path_1.join)((0, node_os_1.tmpdir)(), "sfp-reserve-"));
+    const file = (0, node_path_1.join)(dir, "auth.txt");
+    (0, node_fs_1.writeFileSync)(file, `${authUrl}\n`, { mode: 0o600 });
+    try {
+        const args = ["org", "login", "sfdx-url", "--sfdx-url-file", file];
+        if (alias)
+            args.push("--alias", alias);
+        if (setDefault)
+            args.push("--set-default");
+        const result = exec("sf", args);
+        if (result.status !== 0) {
+            fail(`sf org login sfdx-url failed (exit ${result.status}): ${result.output.trim()}`);
+        }
+    }
+    finally {
+        (0, node_fs_1.rmSync)(dir, { recursive: true, force: true });
     }
 }
 // --- Main / Post entry points ---
@@ -173,7 +220,17 @@ async function runMain() {
                 const outcome = await attemptClaim(auth, candidate);
                 if (outcome === "won") {
                     console.log(`Atomically claimed scratch org: ${candidate.SignupUsername} (Id=${candidate.Id})`);
-                    loginToScratch(candidate.SfdxAuthUrl__c, scratchAlias, setDefaultTargetOrg);
+                    try {
+                        loginToScratch(candidate.SfdxAuthUrl__c, scratchAlias, setDefaultTargetOrg);
+                    }
+                    catch (err) {
+                        console.error(`Post-claim login failed; releasing ${candidate.SignupUsername} back to pool before propagating error.`);
+                        const release = exec("sf", buildReleaseArgs(devhubAlias, candidate.SignupUsername));
+                        if (release.status !== 0) {
+                            console.error(`Failed to auto-release ${candidate.SignupUsername}. Manual release required. sf output: ${release.output.trim()}`);
+                        }
+                        throw err;
+                    }
                     setOutput("scratch-username", candidate.SignupUsername);
                     setOutput("scratch-alias", scratchAlias || candidate.SignupUsername);
                     setState("scratch-username", candidate.SignupUsername);

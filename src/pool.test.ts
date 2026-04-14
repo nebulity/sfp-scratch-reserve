@@ -5,10 +5,51 @@ import {
   buildClaimUrl,
   buildQueryUrl,
   buildReleaseArgs,
+  extractJsonObject,
   parseDevHubAuth,
   shuffle,
   toHttpDate,
 } from "./pool";
+
+describe("extractJsonObject", () => {
+  it("returns the JSON object when output is pure JSON", () => {
+    expect(extractJsonObject('{"a":1}')).toBe('{"a":1}');
+  });
+
+  it("strips a warning prefix emitted by the sf CLI", () => {
+    const output = [
+      " ›   Warning: @salesforce/cli update available from 2.124.7 to 2.130.9.",
+      "",
+      '{"status":0,"result":{"accessToken":"t","instanceUrl":"https://x","username":"u"}}',
+    ].join("\n");
+    expect(extractJsonObject(output)).toBe(
+      '{"status":0,"result":{"accessToken":"t","instanceUrl":"https://x","username":"u"}}',
+    );
+  });
+
+  it("handles nested objects", () => {
+    const output = 'banner\n{"a":{"b":{"c":1}},"d":2}\ntrailer';
+    expect(extractJsonObject(output)).toBe('{"a":{"b":{"c":1}},"d":2}');
+  });
+
+  it("ignores braces inside JSON strings", () => {
+    const output = 'warn\n{"s":"has } inside"}\n';
+    expect(extractJsonObject(output)).toBe('{"s":"has } inside"}');
+  });
+
+  it("handles escaped quotes inside JSON strings", () => {
+    const output = 'warn\n{"s":"quote \\" then }"}\n';
+    expect(extractJsonObject(output)).toBe('{"s":"quote \\" then }"}');
+  });
+
+  it("throws when no JSON object is present", () => {
+    expect(() => extractJsonObject("just warnings")).toThrow(/No JSON object/);
+  });
+
+  it("throws when braces are unbalanced", () => {
+    expect(() => extractJsonObject('prefix {"a":1')).toThrow(/Unbalanced JSON/);
+  });
+});
 
 describe("parseDevHubAuth", () => {
   it("extracts accessToken, instanceUrl, username from sf org display --verbose --json output", () => {

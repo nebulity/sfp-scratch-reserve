@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Salesforce REST API version used for query + atomic claim.
 const API_VERSION = "v59.0";
@@ -74,8 +76,36 @@ export interface ScratchOrgCandidate {
   ExpirationDate: string;
 }
 
+export function extractJsonObject(output: string): string {
+  // sf CLI often emits warning banners (e.g. "Warning: @salesforce/cli update available...")
+  // before the JSON payload on stdout. Skip to the first '{' and match the balancing '}'.
+  const start = output.indexOf("{");
+  if (start === -1) throw new Error(`No JSON object found in output: ${output.slice(0, 200)}`);
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < output.length; i++) {
+    const ch = output[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return output.slice(start, i + 1);
+    }
+  }
+  throw new Error(`Unbalanced JSON in output: ${output.slice(start, start + 200)}`);
+}
+
 export function parseDevHubAuth(output: string): DevHubAuth {
-  const parsed = JSON.parse(output) as {
+  const json = extractJsonObject(output);
+  const parsed = JSON.parse(json) as {
     result?: { accessToken?: string; instanceUrl?: string; username?: string };
   };
   const result = parsed?.result ?? {};
@@ -195,12 +225,24 @@ async function attemptClaim(
 
 function loginToScratch(authUrl: string | null, alias: string, setDefault: boolean): void {
   if (!authUrl) fail("Won scratch org has no SfdxAuthUrl__c; cannot authenticate.");
-  const args = ["org", "login", "sfdx-url", "--sfdx-url-stdin"];
-  if (alias) args.push("--alias", alias);
-  if (setDefault) args.push("--set-default");
-  const result = exec("sf", args, `${authUrl}\n`);
-  if (result.status !== 0) {
-    fail(`sf org login sfdx-url failed (exit ${result.status}): ${result.output.trim()}`);
+
+  // `--sfdx-url-stdin` requires an inline <value> in recent sf CLI versions,
+  // which would leak the auth URL into argv. Use `--sfdx-url-file` with a
+  // restricted temp file and remove it afterwards.
+  const dir = mkdtempSync(join(tmpdir(), "sfp-reserve-"));
+  const file = join(dir, "auth.txt");
+  writeFileSync(file, `${authUrl}\n`, { mode: 0o600 });
+
+  try {
+    const args = ["org", "login", "sfdx-url", "--sfdx-url-file", file];
+    if (alias) args.push("--alias", alias);
+    if (setDefault) args.push("--set-default");
+    const result = exec("sf", args);
+    if (result.status !== 0) {
+      fail(`sf org login sfdx-url failed (exit ${result.status}): ${result.output.trim()}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 
@@ -231,7 +273,20 @@ export async function runMain(): Promise<void> {
           console.log(
             `Atomically claimed scratch org: ${candidate.SignupUsername} (Id=${candidate.Id})`,
           );
-          loginToScratch(candidate.SfdxAuthUrl__c, scratchAlias, setDefaultTargetOrg);
+          try {
+            loginToScratch(candidate.SfdxAuthUrl__c, scratchAlias, setDefaultTargetOrg);
+          } catch (err) {
+            console.error(
+              `Post-claim login failed; releasing ${candidate.SignupUsername} back to pool before propagating error.`,
+            );
+            const release = exec("sf", buildReleaseArgs(devhubAlias, candidate.SignupUsername));
+            if (release.status !== 0) {
+              console.error(
+                `Failed to auto-release ${candidate.SignupUsername}. Manual release required. sf output: ${release.output.trim()}`,
+              );
+            }
+            throw err;
+          }
           setOutput("scratch-username", candidate.SignupUsername);
           setOutput("scratch-alias", scratchAlias || candidate.SignupUsername);
           setState("scratch-username", candidate.SignupUsername);
