@@ -1,12 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractScratchUsername = extractScratchUsername;
-exports.buildPoolFetchArgs = buildPoolFetchArgs;
+exports.parseDevHubAuth = parseDevHubAuth;
+exports.buildAvailableOrgsSoql = buildAvailableOrgsSoql;
+exports.buildQueryUrl = buildQueryUrl;
+exports.buildClaimUrl = buildClaimUrl;
+exports.toHttpDate = toHttpDate;
+exports.shuffle = shuffle;
 exports.buildReleaseArgs = buildReleaseArgs;
 exports.runMain = runMain;
 exports.runPost = runPost;
 const node_child_process_1 = require("node:child_process");
 const node_fs_1 = require("node:fs");
+// Salesforce REST API version used for query + atomic claim.
+const API_VERSION = "v59.0";
 // --- GitHub Actions helpers ---
 function getInput(name, fallback = "") {
     const value = process.env[`INPUT_${name.toUpperCase()}`];
@@ -25,9 +31,13 @@ function fail(message) {
     console.error(`::error::${message}`);
     throw new Error(message);
 }
-function exec(command, args) {
+function exec(command, args, input) {
     console.log(`$ ${command} ${args.join(" ")}`);
-    const result = (0, node_child_process_1.spawnSync)(command, args, { encoding: "utf8", stdio: "pipe" });
+    const result = (0, node_child_process_1.spawnSync)(command, args, {
+        encoding: "utf8",
+        stdio: input === undefined ? "pipe" : ["pipe", "pipe", "pipe"],
+        input,
+    });
     if (result.error) {
         fail(result.error.message);
     }
@@ -36,27 +46,48 @@ function exec(command, args) {
         output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
     };
 }
-// --- Exported pure functions (testable) ---
-function extractScratchUsername(output) {
-    try {
-        const parsed = JSON.parse(output);
-        const username = parsed?.username ?? parsed?.result?.username;
-        return typeof username === "string" && username.trim() ? username.trim() : null;
-    }
-    catch {
-        return null;
-    }
+function sleep(seconds) {
+    return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 }
-function buildPoolFetchArgs(poolTag, devhubAlias, scratchAlias, setDefaultTargetOrg) {
-    const args = ["pool", "fetch", "-t", poolTag];
-    if (devhubAlias)
-        args.push("-v", devhubAlias);
-    if (scratchAlias)
-        args.push("-a", scratchAlias);
-    if (setDefaultTargetOrg)
-        args.push("-d");
-    args.push("--json");
-    return args;
+function parseDevHubAuth(output) {
+    const parsed = JSON.parse(output);
+    const result = parsed?.result ?? {};
+    const { accessToken, instanceUrl, username } = result;
+    if (!accessToken || !instanceUrl || !username) {
+        throw new Error(`sf org display did not return accessToken/instanceUrl/username. Got: ${JSON.stringify(result)}`);
+    }
+    return { accessToken, instanceUrl, username };
+}
+function buildAvailableOrgsSoql(poolTag, limit = 10) {
+    const escaped = poolTag.replace(/'/g, "\\'");
+    return ("SELECT Id, SignupUsername, LastModifiedDate, SfdxAuthUrl__c, Password__c, ExpirationDate " +
+        "FROM ScratchOrgInfo " +
+        `WHERE Allocation_status__c = 'Available' AND Pooltag__c = '${escaped}' AND Status = 'Active' ` +
+        `ORDER BY CreatedDate LIMIT ${limit}`);
+}
+function buildQueryUrl(instanceUrl, soql) {
+    return `${stripTrailingSlash(instanceUrl)}/services/data/${API_VERSION}/query?q=${encodeURIComponent(soql)}`;
+}
+function buildClaimUrl(instanceUrl, recordId) {
+    return `${stripTrailingSlash(instanceUrl)}/services/data/${API_VERSION}/sobjects/ScratchOrgInfo/${recordId}`;
+}
+function toHttpDate(isoString) {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) {
+        throw new Error(`Invalid LastModifiedDate: ${isoString}`);
+    }
+    return date.toUTCString();
+}
+function stripTrailingSlash(url) {
+    return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+function shuffle(arr) {
+    const out = [...arr];
+    for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
 }
 function buildReleaseArgs(devhubAlias, username) {
     const args = ["data", "update", "record"];
@@ -65,10 +96,62 @@ function buildReleaseArgs(devhubAlias, username) {
     args.push("--sobject", "ScratchOrgInfo", "--where", `SignupUsername='${username.replace(/'/g, "\\'")}'`, "--values", "Allocation_status__c='Available'");
     return args;
 }
-// --- Main / Post entry points ---
-function sleep(seconds) {
-    return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+async function getDevHubAuth(alias) {
+    const args = ["org", "display", "--verbose", "--json"];
+    if (alias)
+        args.push("--target-org", alias);
+    const result = exec("sf", args);
+    if (result.status !== 0) {
+        fail(`sf org display failed (exit ${result.status}): ${result.output.trim()}`);
+    }
+    return parseDevHubAuth(result.output);
 }
+async function queryAvailableOrgs(auth, poolTag) {
+    const soql = buildAvailableOrgsSoql(poolTag);
+    const url = buildQueryUrl(auth.instanceUrl, soql);
+    const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${auth.accessToken}` },
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Query failed (${res.status}): ${body}`);
+    }
+    const body = (await res.json());
+    return body.records ?? [];
+}
+async function attemptClaim(auth, candidate) {
+    const url = buildClaimUrl(auth.instanceUrl, candidate.Id);
+    const res = await fetch(url, {
+        method: "PATCH",
+        headers: {
+            Authorization: `Bearer ${auth.accessToken}`,
+            "Content-Type": "application/json",
+            "If-Unmodified-Since": toHttpDate(candidate.LastModifiedDate),
+        },
+        body: JSON.stringify({ Allocation_status__c: "Allocate" }),
+    });
+    if (res.status === 204)
+        return "won";
+    if (res.status === 412)
+        return "raced";
+    const text = await res.text();
+    console.log(`PATCH ${candidate.Id} returned ${res.status}: ${text.trim()}`);
+    return "error";
+}
+function loginToScratch(authUrl, alias, setDefault) {
+    if (!authUrl)
+        fail("Won scratch org has no SfdxAuthUrl__c; cannot authenticate.");
+    const args = ["org", "login", "sfdx-url", "--sfdx-url-stdin"];
+    if (alias)
+        args.push("--alias", alias);
+    if (setDefault)
+        args.push("--set-default");
+    const result = exec("sf", args, `${authUrl}\n`);
+    if (result.status !== 0) {
+        fail(`sf org login sfdx-url failed (exit ${result.status}): ${result.output.trim()}`);
+    }
+}
+// --- Main / Post entry points ---
 async function runMain() {
     const poolTag = getInput("pool-tag");
     if (!poolTag)
@@ -77,26 +160,34 @@ async function runMain() {
     const scratchAlias = getInput("scratch-alias", "scratch");
     const setDefaultTargetOrg = getInput("set-default-target-org", "true") === "true";
     const maxAttempts = Math.max(1, parseInt(getInput("fetch-attempts", "1"), 10) || 1);
+    const auth = await getDevHubAuth(devhubAlias);
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        console.log(`Pool fetch attempt ${attempt}/${maxAttempts}...`);
-        const result = exec("sfp", buildPoolFetchArgs(poolTag, devhubAlias, scratchAlias, setDefaultTargetOrg));
-        if (result.status === 0) {
-            const username = extractScratchUsername(result.output);
-            if (username) {
-                console.log(`Fetched pooled scratch org: ${username}`);
-                const aliasOutput = scratchAlias || username;
-                setOutput("scratch-username", username);
-                setOutput("scratch-alias", aliasOutput);
-                setState("scratch-username", username);
-                setState("devhub-alias", devhubAlias);
-                return;
-            }
+        console.log(`Atomic claim attempt ${attempt}/${maxAttempts} on pool "${poolTag}"...`);
+        const candidates = shuffle(await queryAvailableOrgs(auth, poolTag));
+        if (candidates.length === 0) {
+            console.log(`No Available orgs in pool "${poolTag}".`);
         }
         else {
-            console.log(result.output.trim());
+            console.log(`Found ${candidates.length} Available candidate(s); attempting atomic claim.`);
+            for (const candidate of candidates) {
+                const outcome = await attemptClaim(auth, candidate);
+                if (outcome === "won") {
+                    console.log(`Atomically claimed scratch org: ${candidate.SignupUsername} (Id=${candidate.Id})`);
+                    loginToScratch(candidate.SfdxAuthUrl__c, scratchAlias, setDefaultTargetOrg);
+                    setOutput("scratch-username", candidate.SignupUsername);
+                    setOutput("scratch-alias", scratchAlias || candidate.SignupUsername);
+                    setState("scratch-username", candidate.SignupUsername);
+                    setState("devhub-alias", devhubAlias);
+                    return;
+                }
+                if (outcome === "raced") {
+                    console.log(`Raced on ${candidate.SignupUsername} (If-Unmodified-Since 412); trying next candidate.`);
+                    continue;
+                }
+            }
         }
         if (attempt < maxAttempts) {
-            console.log("No pooled scratch org available yet. Waiting 60s before retry.");
+            console.log("No claim won. Waiting 60s before retry.");
             await sleep(60);
         }
     }

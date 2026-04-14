@@ -1,12 +1,12 @@
 name: sfp-scratch-reserve
-description: Fetches and reserves a pooled scratch org via sfp, then releases it in the post step.
+description: Atomically reserves a pooled Salesforce scratch org via REST If-Unmodified-Since, then releases it in the post step.
 
 inputs:
   pool-tag:
-    description: Scratch org pool tag.
+    description: Scratch org pool tag (Pooltag__c).
     required: true
   devhub-alias:
-    description: Dev Hub alias or username used by sf/sfp commands.
+    description: Dev Hub alias or username used by sf commands.
     required: false
     default: ""
   scratch-alias:
